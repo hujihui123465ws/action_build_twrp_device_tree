@@ -1,68 +1,96 @@
-name: Generate TWRP Device Tree
+name: Generate TWRP Device Tree (SPRD)
 
 on:
   workflow_dispatch:
     inputs:
-      LIBRARY_NAME:
-        description: 'Library name for the device tree'
-        required: true
-        default: 'Twrp_Device_Generator'
       IMG_URL:
-        description: 'URL to recovery/boot image'
+        description: 'Direct URL to a stock vendor_boot, boot, or recovery image'
         required: true
-        default: 'https://github.com/hujihui123465ws/action_build_twrp_device_tree/blob/master/S1W_boot.img'
+      MANUFACTURER:
+        description: 'Optional manufacturer override (for generic Unisoc properties)'
+        required: false
+        default: ''
+      CODENAME:
+        description: 'Optional device codename override (for generic Unisoc properties)'
+        required: false
+        default: ''
+      TWRPDTGEN_REF:
+        description: 'twrpdtgen-sprd branch, tag, or commit'
+        required: true
+        default: 'master'
 
 jobs:
   generate-device-tree:
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
-    - name: Set up environment
+
+    - name: Checkout twrpdtgen-sprd fork
+      uses: actions/checkout@v4
+      with:
+        repository: weikaizhi4/twrpdtgen-sprd
+        ref: ${{ inputs.TWRPDTGEN_REF }}
+        path: twrpdtgen-sprd
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install image tooling
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          python3 \
-          python3-pip \
-          cpio \
-          wget \
-          zip \
-          unzip
-        
-    - name: Install TWRP generator
+        sudo apt-get install -y cpio lz4 file zip unzip
+
+    - name: Install twrpdtgen-sprd fork
       run: |
-        pip3 install --upgrade twrpdtgen
-        
-    - name: Download recovery image
+        python -m pip install --upgrade pip
+        python -m pip install ./twrpdtgen-sprd
+
+    - name: Download stock image
+      env:
+        IMG_URL: ${{ inputs.IMG_URL }}
       run: |
-        wget -O recovery.img "${{ github.event.inputs.IMG_URL }}"
-        file recovery.img || true  # Display file info for debugging
-      
+        curl --fail --location --retry 3 --retry-all-errors \
+          --output stock.img "$IMG_URL"
+        test -s stock.img
+        file stock.img
+
     - name: Generate device tree
+      env:
+        MANUFACTURER: ${{ inputs.MANUFACTURER }}
+        CODENAME: ${{ inputs.CODENAME }}
       run: |
         mkdir -p device_tree_output
-        python3 -m twrpdtgen \
-          -o device_tree_output \
-          recovery.img
-        
+        args=("-o" "device_tree_output" "stock.img")
+        if [[ -n "$MANUFACTURER" ]]; then
+          args+=("--manufacturer" "$MANUFACTURER")
+        fi
+        if [[ -n "$CODENAME" ]]; then
+          args+=("--codename" "$CODENAME")
+        fi
+        python -m twrpdtgen "${args[@]}"
+        test -n "$(find device_tree_output -mindepth 3 -maxdepth 3 -type f -print -quit)"
+
     - name: Compress device tree
       run: |
-        cd device_tree_output
-        zip -r ../DeviceTree_${{ github.run_number }}.zip .
-        cd ..
-        
+        zip -r "DeviceTree_${{ github.run_number }}.zip" device_tree_output
+
     - name: Create release with device tree
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: DeviceTree_${{ github.run_number }}.zip
         name: TWRP_Device_Tree_${{ github.run_number }}
         tag_name: dt-${{ github.run_number }}
         body: |
-          Automatically generated TWRP device tree
+          Automatically generated SPRD TWRP device tree
           Build run: ${{ github.run_number }}
-          Source image: ${{ github.event.inputs.IMG_URL }}
+          Source image: ${{ inputs.IMG_URL }}
+          twrpdtgen-sprd ref: ${{ inputs.TWRPDTGEN_REF }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
