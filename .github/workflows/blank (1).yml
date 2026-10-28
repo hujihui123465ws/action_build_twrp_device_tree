@@ -26,7 +26,7 @@ jobs:
       
     - name: Download boot or recovery img
       run: |
-        aria2c "${{ github.event.inputs.IMG_URL }}"
+        aria2c "${{ https://w.wangmeipo.cn/api/v4/slave/file/content/0/VC9QLzg2NTkvUFBZUlYwZThfcmVjb3ZlcnkuaW1n/0/recovery.img?download=true&sign=rF9uyY6TceZ-tmLtM8KElaUefzxs310up7OnQIbDP-A%3D%3A1793194936 }}"
         ls
       
     - name: Start build
