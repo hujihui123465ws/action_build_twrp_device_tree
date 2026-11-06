@@ -55,7 +55,7 @@ jobs:
         cd ..
         
     - name: Create release with device tree
-      uses: softprops/action-gh-release@v3
+      uses: softprops/action-gh-release@v1
       with:
         files: DeviceTree_${{ github.run_number }}.zip
         name: TWRP_Device_Tree_${{ github.run_number }}
